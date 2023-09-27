@@ -4,141 +4,136 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 const int MAX_CLIENTS = 1000;
 const int BUFFER_SIZE = 1024;
 
-struct sockaddr_in address = {0};
-int clientSockets[1000] = {0};
 char buffer[1024] = {0};
 char buff[1024 + 100] = {0};
-fd_set readfds;
+int clients[1024] = {0};
 int serverSocket;
 int newSocket;
-int sd;
+int len;
 int valread;
-int addrlen;
+int sd;
+fd_set readFds;
+struct sockaddr_in servaddr = {0};
 
-void sendMsg(int fd, int isBuff)
+void sendMSG(int fd, int isBuff, char *msg)
 {
+	fd = fd > 3 ? fd - 4 : fd;
 	if (!isBuff)
 	{
+		sprintf(buffer, msg, fd);
 		for (size_t i = 0; i < MAX_CLIENTS; i++)
 		{
-			if (clientSockets[i] != fd)
-				send(clientSockets[i], buffer, strlen(buffer), 0);
+			if (clients[i] != fd + 4)
+				send(clients[i], buffer, strlen(buffer), 0);
 		}
 		bzero(buffer, BUFFER_SIZE);
 		return;
 	}
+	sprintf(buff, msg, fd, buffer);
 	for (size_t i = 0; i < MAX_CLIENTS; i++)
 	{
-		if (clientSockets[i] != fd)
-			send(clientSockets[i], buff, strlen(buff), 0);
+		if (clients[i] != fd + 4)
+			send(clients[i], buff, strlen(buff), 0);
 	}
 	bzero(buffer, BUFFER_SIZE);
 }
 
 void openSocket(int port)
 {
-	if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) <= 0)
+	serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+	if (serverSocket <= 0)
 	{
-		return;
+		printf("socket creation failed...\n");
+		exit(0);
 	}
 
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(port);
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = INADDR_ANY;
+	servaddr.sin_port = htons(port);
 
-	if (bind(serverSocket, (struct sockaddr *)&address, sizeof(address)) < 0)
+	if ((bind(serverSocket, (const struct sockaddr *)&servaddr, sizeof(servaddr))) < 0)
 	{
-		return;
+		printf("socket bind failed...\n");
+		exit(0);
 	}
-
-	if (listen(serverSocket, MAX_CLIENTS) < 0)
+	if (listen(serverSocket, 10) < 0)
 	{
-		return;
+		printf("cannot listen\n");
+		exit(0);
 	}
-
-	addrlen = sizeof(address);
+	len = sizeof(servaddr);
 }
 
-void handleClientMessages()
+void handleClientMsgs()
 {
-	int i = 0;
-	for (i = 0; i < MAX_CLIENTS; i++)
+	for (size_t i = 0; i < MAX_CLIENTS; i++)
 	{
-		sd = clientSockets[i];
-		if (FD_ISSET(sd, &readfds))
+		sd = clients[i];
+		if (FD_ISSET(sd, &readFds))
 		{
 			if ((valread = recv(sd, buffer, BUFFER_SIZE, 0)) <= 0)
 			{
-				sprintf(buffer, "server: client %d just left\n", sd);
-				sendMsg(sd, 0);
+				sendMSG(sd, 0, "server: client %d just left\n");
 				close(sd);
-				clientSockets[i] = 0;
+				clients[i] = 0;
 			}
-			else
-			{
-				buffer[valread - 1] = '\0';
-				sprintf(buff, "client %d: %s\n", sd, buffer);
-				sendMsg(sd, 1);
-			}
+			buffer[valread - 1] = 0;
+			sendMSG(sd, 1, "client %d: %s\n");
 		}
 	}
 }
 
-void run(void)
+int run()
 {
 	int i = 0;
 	for (;;)
 	{
-		FD_ZERO(&readfds);
-		FD_SET(serverSocket, &readfds);
+		FD_ZERO(&readFds);
+		FD_SET(serverSocket, &readFds);
 
-		for (i = 0; i < MAX_CLIENTS; i++)
+		for (size_t i = 0; i < MAX_CLIENTS; i++)
 		{
-			sd = clientSockets[i];
+			sd = clients[i];
 			if (sd > 0)
-				FD_SET(sd, &readfds);
+				FD_SET(sd, &readFds);
 		}
+		int activity = select(MAX_CLIENTS + 1, &readFds, NULL, NULL, NULL);
+		if (activity <= 0 && errno != EINTR)
+			return printf("select error");
 
-		int activity = select(MAX_CLIENTS + 1, &readfds, NULL, NULL, NULL);
-		if ((activity < 0) && (errno != EINTR))
+		if (FD_ISSET(serverSocket, &readFds) || FD_ISSET(sd, &readFds))
 		{
-			return;
-		}
-
-		if (FD_ISSET(serverSocket, &readfds) || FD_ISSET(sd, &readfds))
-		{
-			if ((newSocket = accept(serverSocket, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
+			newSocket = accept(serverSocket, (struct sockaddr *)&servaddr, (socklen_t *)&len);
+			if (newSocket < 0)
 			{
-				return;
+				printf("server acccept failed...\n");
+				exit(0);
 			}
 			for (size_t i = 0; i < MAX_CLIENTS; i++)
 			{
-				if (clientSockets[i] == 0)
+				if (clients[i] == 0)
 				{
-					clientSockets[i] = newSocket;
+					clients[i] = newSocket;
 					break;
 				}
 			}
 			sprintf(buffer, "server: client %d just arrived\n", newSocket);
-			sendMsg(newSocket, 0);
+			sendMSG(newSocket, 0, "server: client %d just arrived\n");
 		}
-		handleClientMessages();
+		handleClientMsgs();
 	}
 }
 
 int main(int ac, char **av)
 {
 	if (ac != 2)
-	{
-		printf("Wrong number of arguments");
-		exit(0);
-	}
+		return printf("wrong numbers of arguments\n");
 	openSocket(atoi(av[1]));
-	run();
+	return run();
 }
