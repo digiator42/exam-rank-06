@@ -1,10 +1,11 @@
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <errno.h>
 
 const int MAX_CLIENTS = 1000;
 const int BUFFER_SIZE = 1024;
@@ -12,7 +13,7 @@ const int BUFFER_SIZE = 1024;
 struct sockaddr_in address = {0};
 int clientSockets[1000] = {0};
 char buffer[1024] = {0};
-char buff[1024] = {0};
+char buff[1024 + 100] = {0};
 fd_set readfds;
 int serverSocket;
 int newSocket;
