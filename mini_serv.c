@@ -16,11 +16,10 @@ fd_set readfds;
 int serverSocket;
 int newSocket;
 int sd;
-int max_sd;
 int valread;
 int addrlen;
 
-void openSocket()
+void openSocket(int port)
 {
 	if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) <= 0)
 	{
@@ -29,7 +28,7 @@ void openSocket()
 
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(6666);
+	address.sin_port = htons(port);
 
 	if (bind(serverSocket, (struct sockaddr *)&address, sizeof(address)) < 0)
 	{
@@ -86,24 +85,20 @@ void handleClientMessages()
 
 void run(void)
 {
-
 	int i = 0;
 	for (;;)
 	{
 		FD_ZERO(&readfds);
 		FD_SET(serverSocket, &readfds);
-		max_sd = serverSocket;
 
 		for (i = 0; i < MAX_CLIENTS; i++)
 		{
 			sd = clientSockets[i];
 			if (sd > 0)
 				FD_SET(sd, &readfds);
-			if (sd > max_sd)
-				max_sd = sd;
 		}
 
-		int activity = select(max_sd + 1, &readfds, NULL, NULL, NULL);
+		int activity = select(MAX_CLIENTS + 1, &readfds, NULL, NULL, NULL);
 		if ((activity < 0) && (errno != EINTR))
 		{
 			return;
@@ -137,8 +132,13 @@ void run(void)
 	}
 }
 
-int main()
+int main(int ac, char **av)
 {
-	openSocket();
+	if (ac != 2)
+	{
+		printf("Wrong number of arguments");
+		exit(0);
+	}
+	openSocket(atoi(av[1]));
 	run();
 }
