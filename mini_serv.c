@@ -6,18 +6,39 @@
 #include <stdio.h>
 #include <errno.h>
 
-const int MAX_CLIENTS = 128;
-const int BUFFER_SIZE = 200000;
+const int MAX_CLIENTS = 1000;
+const int BUFFER_SIZE = 1024;
 
 struct sockaddr_in address = {0};
-int clientSockets[128] = {0};
-char buffer[200000] = {0};
+int clientSockets[1000] = {0};
+char buffer[1024] = {0};
+char buff[1024] = {0};
 fd_set readfds;
 int serverSocket;
 int newSocket;
 int sd;
 int valread;
 int addrlen;
+
+void sendMsg(int fd, int isBuff)
+{
+	if (!isBuff)
+	{
+		for (size_t i = 0; i < MAX_CLIENTS; i++)
+		{
+			if (clientSockets[i] != fd)
+				send(clientSockets[i], buffer, strlen(buffer), 0);
+		}
+		bzero(buffer, BUFFER_SIZE);
+		return;
+	}
+	for (size_t i = 0; i < MAX_CLIENTS; i++)
+	{
+		if (clientSockets[i] != fd)
+			send(clientSockets[i], buff, strlen(buff), 0);
+	}
+	bzero(buffer, BUFFER_SIZE);
+}
 
 void openSocket(int port)
 {
@@ -54,30 +75,15 @@ void handleClientMessages()
 			if ((valread = recv(sd, buffer, BUFFER_SIZE, 0)) <= 0)
 			{
 				sprintf(buffer, "server: client %d just left\n", sd);
-
-				for (int i = 0; i < MAX_CLIENTS; i++)
-				{
-					if (clientSockets[i] != 0)
-					{
-						send(clientSockets[i], buffer, strlen(buffer), 0);
-					}
-				}
+				sendMsg(sd, 0);
 				close(sd);
 				clientSockets[i] = 0;
 			}
 			else
 			{
-				buffer[valread] = '\0';
-				char buff[BUFFER_SIZE] = {0};
+				buffer[valread - 1] = '\0';
 				sprintf(buff, "client %d: %s\n", sd, buffer);
-				for (int i = 0; i < MAX_CLIENTS; i++)
-				{
-					if (clientSockets[i] != sd)
-					{
-						send(clientSockets[i], buff, strlen(buff), 0);
-					}
-				}
-				bzero(buffer, BUFFER_SIZE);
+				sendMsg(sd, 1);
 			}
 		}
 	}
@@ -119,14 +125,7 @@ void run(void)
 				}
 			}
 			sprintf(buffer, "server: client %d just arrived\n", newSocket);
-			for (int j = 0; j < MAX_CLIENTS; j++)
-			{
-				if (clientSockets[j] != newSocket)
-				{
-					send(clientSockets[j], buffer, strlen(buffer), 0);
-				}
-			}
-			bzero(buffer, BUFFER_SIZE);
+			sendMsg(newSocket, 0);
 		}
 		handleClientMessages();
 	}
