@@ -7,19 +7,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const int MAX_CLIENTS = 1000;
-const int BUFFER_SIZE = 1024;
+const int BUFFER_SIZE = 200000;
+const int MAX_CLINTS = 1000;
 
-char buffer[1024] = {0};
-char buff[1024 + 100] = {0};
-int clients[1024] = {0};
+char buffer[200000] = {0};
+char buff[200000 + 100] = {0};
+int clients[1000] = {0};
 int serverSocket;
 int newSocket;
-int len;
-int valread;
 int sd;
+int valread;
+int len;
 fd_set readFds;
 struct sockaddr_in servaddr = {0};
+int cnt = 0;
 
 void sendMSG(int fd, int isBuff, char *msg)
 {
@@ -27,7 +28,7 @@ void sendMSG(int fd, int isBuff, char *msg)
 	if (!isBuff)
 	{
 		sprintf(buffer, msg, fd);
-		for (size_t i = 0; i < MAX_CLIENTS; i++)
+		for (size_t i = 0; i < MAX_CLINTS; i++)
 		{
 			if (clients[i] != fd + 4)
 				send(clients[i], buffer, strlen(buffer), 0);
@@ -35,11 +36,27 @@ void sendMSG(int fd, int isBuff, char *msg)
 		bzero(buffer, BUFFER_SIZE);
 		return;
 	}
-	sprintf(buff, msg, fd, buffer);
-	for (size_t i = 0; i < MAX_CLIENTS; i++)
+	int i = 0;
+	int k = 0;
+	char temp[1000] = {0};
+	msg = &buffer[0];
+	while (buffer[i])
 	{
-		if (clients[i] != fd + 4)
-			send(clients[i], buff, strlen(buff), 0);
+		if (buffer[i] == '\n')
+		{
+			strncpy(temp, msg, i - k);
+			sprintf(buff, "client %d: %s\n", fd, temp);
+			for (size_t j = 0; j < MAX_CLINTS; j++)
+			{
+				if (clients[j] != fd + 4)
+					send(clients[j], buff, strlen(buff), 0);
+			}
+			k += strlen(temp) + 1;
+			bzero(buff, sizeof(buff));
+			bzero(temp, sizeof(temp));
+			msg = &buffer[i + 1];
+		}
+		i++;
 	}
 	bzero(buffer, BUFFER_SIZE);
 }
@@ -47,11 +64,13 @@ void sendMSG(int fd, int isBuff, char *msg)
 void openSocket(int port)
 {
 	serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-	if (serverSocket <= 0)
+	if (serverSocket < 0)
 	{
 		printf("socket creation failed...\n");
 		exit(0);
 	}
+
+	bzero(&servaddr, sizeof(servaddr));
 
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = INADDR_ANY;
@@ -62,6 +81,7 @@ void openSocket(int port)
 		printf("socket bind failed...\n");
 		exit(0);
 	}
+
 	if (listen(serverSocket, 10) < 0)
 	{
 		printf("cannot listen\n");
@@ -70,9 +90,9 @@ void openSocket(int port)
 	len = sizeof(servaddr);
 }
 
-void handleClientMsgs()
+void handleClientsMsgs()
 {
-	for (size_t i = 0; i < MAX_CLIENTS; i++)
+	for (size_t i = 0; i < MAX_CLINTS; i++)
 	{
 		sd = clients[i];
 		if (FD_ISSET(sd, &readFds))
@@ -83,7 +103,6 @@ void handleClientMsgs()
 				close(sd);
 				clients[i] = 0;
 			}
-			buffer[valread - 1] = 0;
 			sendMSG(sd, 1, "client %d: %s\n");
 		}
 	}
@@ -91,20 +110,21 @@ void handleClientMsgs()
 
 int run()
 {
-	int i = 0;
 	for (;;)
 	{
 		FD_ZERO(&readFds);
 		FD_SET(serverSocket, &readFds);
-
-		for (size_t i = 0; i < MAX_CLIENTS; i++)
+		int max_fd = serverSocket;
+		for (size_t i = 0; i < MAX_CLINTS; i++)
 		{
 			sd = clients[i];
 			if (sd > 0)
 				FD_SET(sd, &readFds);
+			if (max_fd < sd)
+				max_fd = sd;
 		}
-		int activity = select(MAX_CLIENTS + 1, &readFds, NULL, NULL, NULL);
-		if (activity <= 0 && errno != EINTR)
+		int activity = select(max_fd + 1, &readFds, NULL, NULL, NULL);
+		if (activity < 0 && errno != EINTR)
 			return printf("select error");
 
 		if (FD_ISSET(serverSocket, &readFds) || FD_ISSET(sd, &readFds))
@@ -115,7 +135,7 @@ int run()
 				printf("server acccept failed...\n");
 				exit(0);
 			}
-			for (size_t i = 0; i < MAX_CLIENTS; i++)
+			for (size_t i = 0; i < MAX_CLINTS; i++)
 			{
 				if (clients[i] == 0)
 				{
@@ -123,17 +143,16 @@ int run()
 					break;
 				}
 			}
-			sprintf(buffer, "server: client %d just arrived\n", newSocket);
 			sendMSG(newSocket, 0, "server: client %d just arrived\n");
 		}
-		handleClientMsgs();
+		handleClientsMsgs();
 	}
 }
 
 int main(int ac, char **av)
 {
 	if (ac != 2)
-		return printf("wrong numbers of arguments\n");
+		return printf("wrong numbers of arguments");
 	openSocket(atoi(av[1]));
 	return run();
 }
