@@ -6,12 +6,13 @@
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 
-const int BUFFER_SIZE = 200000;
+const int BUFFER_SIZE = 10000;
 const int MAX_CLINTS = 1000;
 
-char buffer[200000] = {0};
-char buff[200000 + 100] = {0};
+char buffer[10000] = {0};
+char buff[10000 + 100] = {0};
 int clients[1000] = {0};
 int serverSocket;
 int newSocket;
@@ -38,7 +39,7 @@ void sendMSG(int fd, int isBuff, char *msg)
 	}
 	int i = 0;
 	int k = 0;
-	char temp[1000] = {0};
+	char temp[10000] = {0};
 	msg = &buffer[0];
 	while (buffer[i])
 	{
@@ -52,8 +53,7 @@ void sendMSG(int fd, int isBuff, char *msg)
 					send(clients[j], buff, strlen(buff), 0);
 			}
 			k += strlen(temp) + 1;
-			bzero(buff, sizeof(buff));
-			bzero(temp, sizeof(temp));
+			bzero(buff, BUFFER_SIZE);
 			msg = &buffer[i + 1];
 		}
 		i++;
@@ -103,7 +103,8 @@ void handleClientsMsgs()
 				close(sd);
 				clients[i] = 0;
 			}
-			sendMSG(sd, 1, "client %d: %s\n");
+			else
+				sendMSG(sd, 1, "client %d: %s\n");
 		}
 	}
 }
@@ -127,7 +128,7 @@ int run()
 		if (activity < 0 && errno != EINTR)
 			return printf("select error");
 
-		if (FD_ISSET(serverSocket, &readFds) || FD_ISSET(sd, &readFds))
+		if (FD_ISSET(serverSocket, &readFds))
 		{
 			newSocket = accept(serverSocket, (struct sockaddr *)&servaddr, (socklen_t *)&len);
 			if (newSocket < 0)
