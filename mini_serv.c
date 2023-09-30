@@ -14,6 +14,7 @@ const int MAX_CLINTS = 1000;
 char buffer[10000] = {0};
 char buff[10000 + 100] = {0};
 int clients[1000] = {0};
+int clientss[1000] = {0};
 int serverSocket;
 int newSocket;
 int sd;
@@ -25,13 +26,18 @@ int cnt = 0;
 
 void sendMSG(int fd, int isBuff, char *msg)
 {
-	fd = fd > 3 ? fd - 4 : fd;
+	int sfd;
+	for (size_t i = 0; i < MAX_CLINTS; i++)
+	{
+		if (clients[i] == fd)
+			sfd = clientss[i];
+	}
 	if (!isBuff)
 	{
-		sprintf(buffer, msg, fd);
+		sprintf(buffer, msg, sfd);
 		for (size_t i = 0; i < MAX_CLINTS; i++)
 		{
-			if (clients[i] != fd + 4)
+			if (clients[i] != fd)
 				send(clients[i], buffer, strlen(buffer), 0);
 		}
 		bzero(buffer, BUFFER_SIZE);
@@ -40,19 +46,23 @@ void sendMSG(int fd, int isBuff, char *msg)
 	int i = 0;
 	int k = 0;
 	char temp[10000] = {0};
+	msg = &buffer[0];
 	while (buffer[i])
 	{
 		if (buffer[i] == '\n')
 		{
-			strncpy(temp, &buffer[k], i - k);
-			sprintf(buff, "client %d: %s\n", fd, temp);
+			if (i - k > 0)
+				strncpy(temp, msg, i - k);
+			sprintf(buff, "client %d: %s\n", sfd, temp);
 			for (size_t j = 0; j < MAX_CLINTS; j++)
 			{
-				if (clients[j] != fd + 4)
+				if (clients[j] != fd)
 					send(clients[j], buff, strlen(buff), 0);
 			}
 			k += strlen(temp) + 1;
+			bzero(temp, BUFFER_SIZE);
 			bzero(buff, BUFFER_SIZE);
+			msg = &buffer[i + 1];
 		}
 		i++;
 	}
@@ -100,6 +110,7 @@ void handleClientsMsgs()
 				sendMSG(sd, 0, "server: client %d just left\n");
 				close(sd);
 				clients[i] = 0;
+				clientss[i] = 0;
 			}
 			else
 				sendMSG(sd, 1, "client %d: %s\n");
@@ -139,6 +150,7 @@ int run()
 				if (clients[i] == 0)
 				{
 					clients[i] = newSocket;
+					clientss[i] = cnt++;
 					break;
 				}
 			}
