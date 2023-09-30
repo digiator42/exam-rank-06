@@ -40,12 +40,11 @@ void sendMSG(int fd, int isBuff, char *msg)
 	int i = 0;
 	int k = 0;
 	char temp[10000] = {0};
-	msg = &buffer[0];
 	while (buffer[i])
 	{
 		if (buffer[i] == '\n')
 		{
-			strncpy(temp, msg, i - k);
+			strncpy(temp, &buffer[k], i - k);
 			sprintf(buff, "client %d: %s\n", fd, temp);
 			for (size_t j = 0; j < MAX_CLINTS; j++)
 			{
@@ -54,7 +53,6 @@ void sendMSG(int fd, int isBuff, char *msg)
 			}
 			k += strlen(temp) + 1;
 			bzero(buff, BUFFER_SIZE);
-			msg = &buffer[i + 1];
 		}
 		i++;
 	}
