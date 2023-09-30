@@ -110,7 +110,6 @@ void handleClientsMsgs()
 				sendMSG(sd, 0, "server: client %d just left\n");
 				close(sd);
 				clients[i] = 0;
-				clientss[i] = 0;
 			}
 			else
 				sendMSG(sd, 1, "client %d: %s\n");
